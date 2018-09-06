@@ -1,0 +1,51 @@
+import os
+import re
+import sys
+
+def renameall(path,time):
+    fileList = os.listdir(path)  # 带修改文件夹
+    print('修改前：' + str(fileList))  # 输出文件夹中包含的文件
+    currentpath = os.getcwd()  # 得到进程当前工作目录
+    os.chdir(path)  # 将当前工作目录修改为待修改文件夹的位置
+    num = 1  # 名称变量
+    for fileName in fileList:  # 遍历文件夹中的所有文件
+        pat = '.+\.(jpg|png|gif|xml)'  # 匹配文件名正则表达式
+        pattern = re.findall(pat, fileName)  # 进行匹配
+        os.rename(fileName, time + (str(num+10000) + '.' + pattern[0]))  # 文件重新命名
+        num = num + 1  # 改变编号，继续下一项
+    print('------------------------------------------------------------')
+    os.chdir(currentpath)  # 改回程序运行前的工作目录
+    sys.stdin.flush()  # 刷新
+    print('修改后：' + str(os.listdir(path)))  # 输出修改后文件夹包含的文件
+
+
+#renameall()
+def repalace(path,time):
+    fileList = os.listdir(path)
+    num=1
+    beijing='公司大空间平视正机位半场'
+  #  lujin='E:/待扩充火灾样本/20180802整理/33 公司大空间平视正机位半场/2/'
+    for fileName in fileList:
+      f = open(path+'/'+fileName, 'rb')
+      riqi=time + (str(num+10000) + '.' + 'png')
+      xmldata = f.read()
+      xmldata = xmldata.decode('utf-8')
+      xmldata = re.sub('<filename>(.*?)</filename>', '<filename>'+riqi+'</filename>', xmldata)
+      xmldata = re.sub('<database>unknown</database>', '<database>'+beijing+'</database>', xmldata)
+      xmldata = re.sub('<annotation>unknown</annotation>', '<annotation>'+beijing+'</annotation>', xmldata)
+      xmldata = re.sub('<image>unknown</image>', '<image>'+beijing+'</image>', xmldata)
+      xmldata = re.sub('<author>unknown</author>', '<author>'+beijing+'</author>', xmldata)
+      xmldata = re.sub('<date>unknown</date>', '<date>'+beijing+'</date>', xmldata)
+      f.close()
+      f = open(path+'/'+fileName, 'wb')
+      xmldata = xmldata.encode('utf-8')
+      f.write(xmldata)
+      f.close()
+      num=num+1
+    print(xmldata)
+
+if __name__ == "__main__":
+    dir=r'E:\测试\33 公司大空间平视正机位半场\1'
+    time='20180802_31_'
+    renameall(dir,time)
+    repalace(dir,time)

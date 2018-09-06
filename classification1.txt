@@ -1,0 +1,132 @@
+import os
+import re
+import sys
+import xlrd,xlsxwriter
+import pandas as pd
+import os,shutil
+import xml.dom.minidom
+import numpy as np
+import argparse
+import cv2
+import chardet
+from datetime import datetime,date
+
+
+def getFilesList_dir(path,validFormat):
+    def isFormatFile(filename, Formats):
+        _filename = str.lower(filename)
+        match = False
+        for _format in Formats:
+            _format = str.lower(_format)
+            if str.endswith(_filename, _format):
+                match = True
+        return match
+    file_list = [os.path.join(path,x) for x in os.listdir(path) if isFormatFile(x, validFormat)]
+    return file_list
+
+def classification(path,dir):
+    img_format = ['.xml']
+    file_list = getFilesList_dir(path, img_format)
+    # workbook = xlsxwriter.Workbook(path + "/wubao.xlsx")
+    # worksheet = workbook.add_worksheet()
+    for file in file_list:
+        #(temp, temp1) = os.path.splitext(os.path.basename(file))
+        filename=os.path.join(path,file)
+        dom_dst = xml.dom.minidom.parse(filename)
+        root_dst = dom_dst.documentElement
+        object_lst = root_dst.getElementsByTagName('object')
+        sor_dom = xml.dom.minidom.parse(r'E:\待扩充火灾样本\SFDetectorV3.xml')
+        sor_dst = sor_dom.documentElement
+        for obj in object_lst:
+            levels=[]
+            name = obj.getElementsByTagName("name")[0].childNodes[0].data
+            score=obj.getElementsByTagName("score")[0].childNodes[0].data
+            score=float(score)
+            if name=='smoke_white_normal':
+                for i in range(9):
+                    temp2='LevelThreshold'+str(i+1)
+                    lev=sor_dst.getElementsByTagName(temp2)[0]
+                    score1=lev.getElementsByTagName("LevelthrSmokeWhiteNormal")[0].childNodes[0].data
+                    score1 = float(score1)
+                    if score>score1:
+                        levels.append(i+1)
+            elif name=='smoke_white_diffusion':
+                for i in range(9):
+                    temp2='LevelThreshold'+str(i+1)
+                    lev=sor_dst.getElementsByTagName(temp2)[0]
+                    score1=lev.getElementsByTagName("LevelthrSmokeWhiteDiffusion")[0].childNodes[0].data
+                    score1 = float(score1)
+                    if score>score1:
+                        levels.append(i+1)
+            elif name=='smoke_black_normal':
+                for i in range(9):
+                    temp2='LevelThreshold'+str(i+1)
+                    lev=sor_dst.getElementsByTagName(temp2)[0]
+                    score1=lev.getElementsByTagName("LevelthrSmokeBlackNormal")[0].childNodes[0].data
+                    score1 = float(score1)
+                    if score>score1:
+                        levels.append(i+1)
+            elif name=='smoke_black_diffusion':
+                for i in range(9):
+                    temp2='LevelThreshold'+str(i+1)
+                    lev=sor_dst.getElementsByTagName(temp2)[0]
+                    score1=lev.getElementsByTagName("LevelthrSmokeBlackDiffusion")[0].childNodes[0].data
+                    score1 = float(score1)
+                    if score>score1:
+                        levels.append(i+1)
+            elif name=='smoke_weak_normal':
+                for i in range(9):
+                    temp2='LevelThreshold'+str(i+1)
+                    lev=sor_dst.getElementsByTagName(temp2)[0]
+                    score1=lev.getElementsByTagName("LevelthrSmokeWeakNormal")[0].childNodes[0].data
+                    score1 = float(score1)
+                    if score>score1:
+                        levels.append(i+1)
+            elif name=='smoke_weak_diffusion':
+                for i in range(9):
+                    temp2='LevelThreshold'+str(i+1)
+                    lev=sor_dst.getElementsByTagName(temp2)[0]
+                    score1=lev.getElementsByTagName("LevelthrSmokeWeakDiffusion")[0].childNodes[0].data
+                    score1 = float(score1)
+                    if score>score1:
+                        levels.append(i+1)
+            elif name=='flame_color_sharp':
+                for i in range(9):
+                    temp2='LevelThreshold'+str(i+1)
+                    lev=sor_dst.getElementsByTagName(temp2)[0]
+                    score1=lev.getElementsByTagName("LevelthrFlameColorSharp")[0].childNodes[0].data
+                    score1 = float(score1)
+                    if score>score1:
+                        levels.append(i+1)
+            elif name=='flame_color_fuzzy':
+                for i in range(9):
+                    temp2='LevelThreshold'+str(i+1)
+                    lev=sor_dst.getElementsByTagName(temp2)[0]
+                    score1=lev.getElementsByTagName("LevelthrFlameColorFuzzy")[0].childNodes[0].data
+                    score1 = float(score1)
+                    if score>score1:
+                        levels.append(i+1)
+            elif name=='flame_fuzzy':
+                for i in range(9):
+                    temp2='LevelThreshold'+str(i+1)
+                    lev=sor_dst.getElementsByTagName(temp2)[0]
+                    score1=lev.getElementsByTagName("LevelthrFlameFuzzy")[0].childNodes[0].data
+                    score1 = float(score1)
+                    if score>score1:
+                        levels.append(i+1)
+            elif name=='person':
+                for i in range(9):
+                    temp2='LevelThreshold'+str(i+1)
+                    lev=sor_dst.getElementsByTagName(temp2)[0]
+                    score1=lev.getElementsByTagName("LevelthrPerson")[0].childNodes[0].data
+                    score1 = float(score1)
+                    if score>score1:
+                        levels.append(i+1)
+        levelmax=max(levels)
+        dir1=dir+'/'+str(levelmax)
+        shutil.copy(filename, dir1)
+
+if __name__=="__main__":
+    path=r'E:\待扩充火灾样本\wubao'
+    dir=r'E:\待扩充火灾样本\20180904误报分类'
+    classification(path,dir)

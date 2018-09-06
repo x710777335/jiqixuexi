@@ -1,0 +1,88 @@
+import xlrd,xlsxwriter
+import pandas as pd
+import os,shutil
+import xml.dom.minidom
+import numpy as np
+import argparse
+import cv2
+import chardet
+from datetime import datetime,date
+
+#匹配对应文件类型
+def getFilesList_dir(path,validFormat):
+    def isFormatFile(filename, Formats):
+        _filename = str.lower(filename)
+        match = False
+        for _format in Formats:
+            _format = str.lower(_format)
+            if str.endswith(_filename, _format):
+                match = True
+        return match
+    file_list = [os.path.join(path,x) for x in os.listdir(path) if isFormatFile(x, validFormat)]
+    return file_list
+
+#得到文件名并储存在xmls中
+def xmlname(path):
+    xmls=[]
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            if os.path.splitext(file)[1] == '.xml':
+                #L.append(os.path.join(root, file))
+                (temp1, temp2) = os.path.splitext(file)
+                xmls.append(temp1)
+                #print(xml)
+    return xmls
+#在xmls中寻找名字相同得文件并进行负样本目标的copy
+def check(path,xmls):
+    for temp in xmls:
+        for temp1 in xmls:
+            if temp==temp1+'model_out':
+                dir1=path+'/'+temp+'.xml'
+                dir2=path+'/'+temp1+'.xml'
+                copy(dir1, dir2)
+
+#将xml1文件里的样本信息copy到xml2中
+def copy(dir1,dir2):
+    target_dicts = {"smoke", "smoke_dif", "smoke_bk", "smoke_bk_dif", "smoke_wk", "smoke_wk_dif",
+                    "flame", "flame_colr_fu", "flame_fu"}
+    # step1 : 读取dstXML
+    dom_dst = xml.dom.minidom.parse(dir1)
+    root_dst = dom_dst.documentElement
+    # step2 :loc dst objects
+    objects_dst = root_dst.getElementsByTagName("objects")[0]
+    # step 3: load src xml and loc objects
+    dom_src = xml.dom.minidom.parse(dir2)
+    root_src = dom_src.documentElement
+    objects_src = root_src.getElementsByTagName("objects")[0]
+    object_lst = objects_src.getElementsByTagName('object')
+    # step4 copy
+    for obj in object_lst:
+        try:
+            name = obj.getElementsByTagName("name")[0].childNodes[0].data
+        except Exception as err:
+                obj.parentNode.removeChild(obj)#删除节点
+
+        if name not in target_dicts:
+            new_obj = obj.cloneNode(True)
+            objects_dst.appendChild(new_obj)
+    # step5 write xml
+    #test_xml = root_dst.toxml()
+    with open(dir1, "w") as f:
+        dom_dst.writexml(f,  addindent='\t', newl="", encoding='utf-8')
+
+if __name__=='__main__':
+    path=r'E:\测试\error - 副本'
+    xmls=xmlname(path)
+    check(path,xmls)
+
+
+
+
+
+
+
+
+
+
+
+

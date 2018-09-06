@@ -1,0 +1,34 @@
+import os
+import re
+import sys
+import xlrd,xlsxwriter
+import pandas as pd
+import os,shutil
+import xml.dom.minidom
+import numpy as np
+import argparse
+import cv2
+import chardet
+from datetime import datetime,date
+
+def getFilesList_dir(path,validFormat):
+    def isFormatFile(filename, Formats):
+        _filename = str.lower(filename)
+        match = False
+        for _format in Formats:
+            _format = str.lower(_format)
+            if str.endswith(_filename, _format):
+                match = True
+        return match
+    file_list = [os.path.join(path,x) for x in os.listdir(path) if isFormatFile(x, validFormat)]
+    return file_list
+
+path=r'E:\´ýÀ©³ä»ðÔÖÑù±¾\Îó±¨É¸Ñ¡\10'
+fileList = getFilesList_dir(path, '.png')
+currentpath = os.getcwd()
+os.chdir(path)
+for fileName in fileList:
+    (temp, temp1) = os.path.splitext(os.path.basename(fileName))
+    os.rename(fileName, temp+'.jpg')
+os.chdir(currentpath)
+sys.stdin.flush()

@@ -1,0 +1,44 @@
+import os
+import re
+import sys
+import xlrd,xlsxwriter
+import pandas as pd
+import os,shutil
+import xml.dom.minidom
+import numpy as np
+import argparse
+import cv2
+import chardet
+from datetime import datetime,date
+
+
+def getFilesList_dir(path,validFormat):
+    def isFormatFile(filename, Formats):
+        _filename = str.lower(filename)
+        match = False
+        for _format in Formats:
+            _format = str.lower(_format)
+            if str.endswith(_filename, _format):
+                match = True
+        return match
+    file_list = [os.path.join(path,x) for x in os.listdir(path) if isFormatFile(x, validFormat)]
+    return file_list
+
+def classification(path):
+    img_format = ['.xml']
+    file_list = getFilesList_dir(path, img_format)
+    for file in file_list:
+        filename=os.path.join(path,file)
+        dom_dst = xml.dom.minidom.parse(filename)
+        root_dst = dom_dst.documentElement
+        object_lst = root_dst.getElementsByTagName('source')[0]
+        name=object_lst.getElementsByTagName('database')[0].childNodes[0].data
+        dir1=path+'/'+name
+        isExists = os.path.exists(dir1)
+        if not isExists:
+            os.makedirs(dir1)
+        shutil.copy(filename, dir1)
+
+if __name__=="__main__":
+    path=r'E:\待扩充火灾样本\20180904误报分类\9'
+    classification(path)

@@ -1,0 +1,47 @@
+import os
+import re
+import sys
+import xlrd,xlsxwriter
+import pandas as pd
+import os,shutil
+import xml.dom.minidom
+import numpy as np
+import argparse
+import cv2
+import chardet
+from datetime import datetime,date
+
+def getFilesList_dir(path,validFormat):
+    def isFormatFile(filename, Formats):
+        _filename = str.lower(filename)
+        match = False
+        for _format in Formats:
+            _format = str.lower(_format)
+            if str.endswith(_filename, _format):
+                match = True
+        return match
+    file_list = [os.path.join(path,x) for x in os.listdir(path) if isFormatFile(x, validFormat)]
+    return file_list
+
+
+def replace(path):
+    img_format = ['.xml']
+    fileList = getFilesList_dir(path, img_format)
+    for fileName in fileList:
+        with open(fileName, "r", encoding="utf-8") as f:
+            dom_dst = xml.dom.minidom.parse(f)
+            root_dst = dom_dst.documentElement
+            objects = root_dst.getElementsByTagName("objects")[0]
+            object=objects.getElementsByTagName("object")
+            for obj in object:
+                name = obj.getElementsByTagName("name")[0].childNodes[0]
+                name.nodeValue='unkown'
+            with open(fileName, "w",encoding="utf-8") as f:
+                dom_dst.writexml(f,  addindent='', newl="", encoding='utf-8')
+
+
+
+
+if __name__ == "__main__":
+    path=r"E:\´ýÀ©³ä»ðÔÖÑù±¾\Îó±¨É¸Ñ¡\3"
+    replace(path)

@@ -1,0 +1,112 @@
+import os
+import re
+import sys
+import xlrd,xlsxwriter
+import pandas as pd
+import os,shutil
+import xml.dom.minidom
+import numpy as np
+import argparse
+import cv2
+import chardet
+from datetime import datetime,date
+
+def getFilesList_dir(path,validFormat):
+    def isFormatFile(filename, Formats):
+        _filename = str.lower(filename)
+        match = False
+        for _format in Formats:
+            _format = str.lower(_format)
+            if str.endswith(_filename, _format):
+                match = True
+        return match
+    file_list = [os.path.join(path,x) for x in os.listdir(path) if isFormatFile(x, validFormat)]
+    return file_list
+
+
+def renameimg(path,fileList,time,hz):
+    # img_format = ['.png','.jpg']
+    # fileList = getFilesList_dir(path, img_format)
+    #fileList = os.listdir(path)  # 带修改文件夹
+    print('修改前：' + str(fileList))  # 输出文件夹中包含的文件
+    currentpath = os.getcwd()  # 得到进程当前工作目录
+    os.chdir(path)  # 将当前工作目录修改为待修改文件夹的位置
+    num = 1  # 名称变量
+    for fileName in fileList:  # 遍历文件夹中的所有文
+        os.rename(fileName, time + (str(num+10000) + hz))  # 文件重新命名
+        num = num + 1  # 改变编号，继续下一项
+    print('------------------------------------------------------------')
+    os.chdir(currentpath)  # 改回程序运行前的工作目录
+    sys.stdin.flush()  # 刷新
+    print('修改后：' + str(os.listdir(path)))  # 输出修改后文件夹包含的文件
+
+def renamexml(path,fileList,time):
+    # img_format = ['.xml']
+    # fileList = getFilesList_dir(path, img_format)
+    print('修改前：' + str(fileList))  # 输出文件夹中包含的文件
+    currentpath = os.getcwd()  # 得到进程当前工作目录
+    os.chdir(path)  # 将当前工作目录修改为待修改文件夹的位置
+    num = 1  # 名称变量
+    for fileName in fileList:  # 遍历文件夹中的所有文
+        os.rename(fileName, time + (str(num+10000) + '.xml'))  # 文件重新命名
+        num = num + 1  # 改变编号，继续下一项
+    print('------------------------------------------------------------')
+    os.chdir(currentpath)  # 改回程序运行前的工作目录
+    sys.stdin.flush()  # 刷新
+    print('修改后：' + str(os.listdir(path)))  # 输出修改后文件夹包含的文件
+
+def replace(fileList,time):
+    # img_format = ['.xml']
+    # fileList = getFilesList_dir(path, img_format)
+    num=1
+    for fileName in fileList:
+        with open(fileName, "r",encoding='utf-8') as f:
+            riqi = time + (str(num + 10000) + '.' + 'png')
+            dom_dst = xml.dom.minidom.parse(f)
+            root_dst = dom_dst.documentElement
+            filename = root_dst.getElementsByTagName("filename")[0].childNodes[0]
+            filename.nodeValue=riqi
+            num=num+1
+            with open(fileName, "w") as f:
+                dom_dst.writexml(f,  addindent='\t', newl="", encoding='utf-8')
+
+def name(path,hz):
+    list=[]
+    for root, dirs, files in os.walk(path):
+        for file in files:
+            if os.path.splitext(file)[1] == hz:
+                (temp1, temp2) = os.path.splitext(file)
+                list.append(temp1)
+    return list
+
+def detect(dir,dir1):
+    png=[]
+    jpg=[]
+    xmls=[]
+    fileList = name(dir,'.xml')#xml
+    fileList1 = name(dir, '.png')#png原始
+    fileList2 = name(dir1, '.jpg')#jpg有标记的
+    for temp in fileList:
+        for temp1 in fileList1:
+            for temp2 in fileList2:
+                if temp==temp1==temp2:
+                    temp=dir+'/'+temp+'.xml'
+                    temp1= dir + '/' + temp1 + '.png'#原始
+                    temp2=dir1 + '/' + temp2 + '.jpg'#有标记的
+                    png.append(temp1)
+                    xmls.append(temp)
+                    jpg.append(temp2)
+    return png,jpg,xmls
+
+
+
+if __name__ == "__main__":
+    time='20180802_03_'
+    beijing='待定'
+    dir=r'E:\测试\11 西坝口 - 副本'
+    dir1=r'E:\测试\11 西坝口 - 副本\crop'
+    png, jpg, xmls=detect(dir, dir1)
+    renameimg(dir,png,time,'.png')#原始文件
+    renameimg(dir1,jpg,time,'.jpg')#生成的文件或者标记后的文件，注意后缀，自改下
+    replace(xmls, time)
+    renamexml(dir,xmls,time)

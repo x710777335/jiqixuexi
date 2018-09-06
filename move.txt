@@ -1,0 +1,39 @@
+import shutil
+import os
+import glob
+from PIL import Image
+
+xmls=[]
+jpg=[]
+def xmlname(dir):
+    fileList = os.listdir(dir)
+    for filename in fileList:
+        (temp1, temp2) = os.path.splitext(filename)
+        xmls.append(temp1)
+
+def jpgname(dir1):
+    fileList = os.listdir(dir1)
+    for filename in fileList:
+        (temp1, temp2) = os.path.splitext(filename)
+        jpg.append(temp1)
+
+
+def move(dir1):
+    xml_dict = {os.path.splitext(os.path.basename(x))[0]: x for x in xmlfile}
+    png_dict = {os.path.splitext(os.path.basename(x))[0]: x for x in pngfile}
+    for xml1 in xmls:
+        for jpg1 in jpg:
+            if xml1 == jpg1.strip('_mis'):
+                filename1=xml_dict[xml1]
+                filename2 = png_dict[xml1]
+                #filename1=dir+'/'+xml1+'.xml'
+                shutil.copy(filename1,dir1)
+                shutil.copy(filename2, dir1)
+if __name__=="__main__":
+    dir=r'E:\待扩充火灾样本\8月27之前\原始资料'
+    dir1=r'E:\待扩充火灾样本\无用删除'
+    xmlfile = glob.glob(dir+'/*.xml')
+    pngfile = glob.glob(dir + '/*.png')
+    xmlname(dir)
+    jpgname(dir1)
+    move(dir1)

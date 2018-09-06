@@ -1,0 +1,148 @@
+# -*- coding: utf-8 -*-
+import os
+import sys
+import cv2
+from xml.dom.minidom import Document
+from xml.dom import minidom
+from PIL import Image
+class xmlwrite():
+    '''
+    初始化，定义生成文本内容的编码格式
+    '''
+    def __init__(self,writeencoding,xmlencoding,purposedir):
+        self.writeenconding=writeencoding
+        self.xmlencoding=xmlencoding
+        self.purposedir=purposedir
+    '''
+    定义xml文件格式的节点字典
+    '''
+    xml_dict = {
+        "opencv_storage": {
+            "annotation": {
+                "folder": "unknown",
+                "filename": "unknown",
+                "source": {
+                    "database": "unknown",
+                    "annotation": "unknown",
+                    "image": "unknown",
+                    "check": "0",
+                    "normalize": "0",
+                    "paramsVer": "0"
+                },
+                "size": {
+                    "width": "",
+                    "height": "",
+                    "depth": "3",
+                },
+                "segmented": "0",
+                "author": "unknown",
+                "date": "unknown",
+                "objects": {
+                    "object": {
+                        "name": "unknown",
+                        "pose": "unknown",
+                        "truncated": "0",
+                        "difficult": "5",
+                        "key": "",
+                        "bndbox": {
+                            "xmin": "0",
+                            "ymin": "0",
+                            "xmax": "0",
+                            "ymax": "0"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    img_formats = ['.jpg', '.jpeg', '.png', '.bmp']
+    #获取初始定义的字典
+    @classmethod
+    def getxmldict(cls):
+        return cls.xml_dict
+    #设置自定义的字典
+    @classmethod
+    def setxmldict(cls,xml_dict):
+        cls.xml_dict=xml_dict
+    @classmethod
+    def getimgformat(cls):
+        return cls.img_formats
+    @classmethod
+    def setimgformat(cls,img_formats):
+        cls.img_formats=img_formats
+    # 获取path路径下格式为validFormats的文件路径
+    def getFilesList_dir(self,validFormats):
+        def isFormatFile(filename, Formats):
+            _filename = str.lower(filename)
+            match = False
+            for _format in Formats:
+                _format = str.lower(_format)
+                if str.endswith(_filename, _format):
+                    match = True
+            return match
+
+        file_list = [os.path.join(self.purposedir, x) for x in os.listdir(self.purposedir) if isFormatFile(x,validFormats)]
+        return file_list
+
+
+
+
+
+    # dict转换为相应的xml文件
+    def dict_to_xml(self,xml_name, xml_dict):
+        '''
+        doc = Document()
+        root = doc.createElement("".join(xml_dict.keys()))
+        doc.appendChild(root)
+        '''
+        impl = minidom.getDOMImplementation()
+        dom = impl.createDocument(None, "opencv_storage", None)
+        root=dom.documentElement
+
+        def son_dict_to_xml(cur_node, xml_dict):
+            if not isinstance(xml_dict, dict):
+                return
+            for node, son_node_dict in xml_dict.items():
+                son_node_list = son_node_dict.keys()
+                for son_node_key in son_node_list:
+                    son_node = dom.createElement(son_node_key)
+                    cur_node.appendChild(son_node)
+                    if not isinstance(son_node_dict[son_node_key], dict):
+                        son_node_value = dom.createTextNode(son_node_dict[son_node_key])
+                        son_node.appendChild(son_node_value)
+                    else:
+                        temp_dict = {}
+                        temp_dict[son_node_key] = son_node_dict[son_node_key]
+                        son_dict_to_xml(son_node, temp_dict)
+
+        son_dict_to_xml(root, xml_dict)
+        with open(self.purposedir+"\\"+xml_name, "w",encoding=self.writeenconding) as f:
+            dom.writexml(f,addindent='  ', newl='\n', encoding=self.xmlencoding)
+    #获得图片的尺寸
+    def getpicture_size(self,picture_path):
+        img=Image.open(picture_path)
+        return img.width,img.height
+if __name__=="__main__":
+    xml_write=xmlwrite("utf-8","utf-8",r"C:\Users\Administrator\Desktop\123")
+    xml_dict=xml_write.getxmldict()
+    file_list = xml_write.getFilesList_dir(xmlwrite.getimgformat())
+    for file in file_list:
+        filename = os.path.basename(file)
+        floder = "E:/测试"
+        img = Image.open(file)
+        width = img.width
+        height = img.height
+        #depth = img.shape[2]
+        #name = filename.split(".")[0]
+        #date = filename.split(".")[1][:8]
+        xml_dict["opencv_storage"]["annotation"]["size"]["width"] = str(width)
+        xml_dict["opencv_storage"]["annotation"]["size"]["height"] = str(height)
+        #xml_dict["opencv_storage"]["annotation"]["size"]["depth"] = str(depth)
+        xml_dict["opencv_storage"]["annotation"]["folder"] = floder
+        xml_dict["opencv_storage"]["annotation"]["filename"] = filename
+        #xml_dict["opencv_storage"]["annotation"]["objects"]["object"]["name"] = name
+        #xml_dict["opencv_storage"]["annotation"]["objects"]["object"]['bndbox']["xmax"] = str(width - 1)
+        #xml_dict["opencv_storage"]["annotation"]["objects"]["object"]['bndbox']["ymax"] = str(height - 1)
+        xml_write.dict_to_xml(os.path.splitext(filename)[0] + ".xml", xml_dict)
+
+

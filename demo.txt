@@ -1,0 +1,62 @@
+
+
+import os
+import shutil
+
+original_path_img = r'E:\待扩充火灾样本\误报分类\3'
+object_path_img = r'E:\待扩充火灾样本\误报筛选\3'
+
+def checkFormat(name,validEx=".xml"):
+    return name.endswith(validEx)
+
+# step1:check path list
+pic_lst = [x for x in os.listdir(object_path_img) if checkFormat(x,".jpg")]    # 找出目标文件中.jpg格式文件
+xml_lst = [x for x in os.listdir(object_path_img) if checkFormat(x)]           # 找出目标文件中.xml格式文件
+
+# os.path.splitext(path)  分割路径，返回路径名和文件扩展名的元组
+ann_lst = [x for x in pic_lst if str.endswith(os.path.splitext(x)[0],"annotation")]     # 在pic_lst找出有关键字annotation的文件
+src_lst = [x for x in pic_lst if not str.endswith(os.path.splitext(x)[0],"annotation")] # 在pic_lst找出没有关键字annotation的文件
+
+# step2:比较链表长度，获取最大链表（无丢失文件链表）
+miss_files_name = []
+match_lst = ann_lst
+if len(ann_lst) < len(src_lst):
+    if len(src_lst) < len(xml_lst):
+        match_lst = xml_lst
+    else:
+        match_lst = src_lst
+elif len(ann_lst) < len(xml_lst):
+    match_lst = xml_lst
+
+# 去除format，去除_annotation
+def get_baseName(name):
+    name = os.path.splitext(x)[0]
+    if name.endswith("annotation"):
+        name = name[:-11]
+#       str.strip(name,"_annotation")   # strip() 方法用于移除字符串头尾指定的字符（默认为空格或换行符）或字符序列。
+    return name
+
+# os.path.dirname(path) #返回文件路径
+# os.path.join(path1[, path2[, ...]])  #把目录和文件名合成一个路径
+def check_move_files(name,check_path,src_path):
+    if not os.path.dirname(os.path.join(check_path,name)):   #检查丢失文件？ 不太懂。
+        print("cur object path miss [{}]".format(name))
+    try:
+        shutil.move(os.path.join(src_path,name),os.path.join(check_path,name))
+    except:
+        print("[{}] is not at [{}]".format(name,src_path))
+
+for x in match_lst:
+    # step3 :find miss file_base_name
+    base_name = get_baseName(x)    # 获得文件名。有 _annotation
+    print(base_name)
+    xml_name = base_name + ".xml"
+    print(xml_name)
+    check_move_files(xml_name,object_path_img,original_path_img)
+    src_name = base_name + ".jpg"
+    check_move_files(src_name, object_path_img, original_path_img)
+    ann_name = base_name + "_annotation.jpg"
+    check_move_files(ann_name, object_path_img, original_path_img)
+
+
+

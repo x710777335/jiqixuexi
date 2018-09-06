@@ -1,0 +1,187 @@
+# -*- coding:utf-8 -*-
+#!/usr/bin/python3
+"""
+@author:xyk
+@file:read_xml_and_rename.py
+@time:2018/7/11：15:25
+"""
+
+
+import os,shutil
+import xml.dom.minidom
+import numpy as np
+import argparse
+import chardet
+import pandas as pd
+
+def getFilesList_dir(path,validFormat):
+    def isFormatFile(filename, Formats):
+        _filename = str.lower(filename)
+        match = False
+        for _format in Formats:
+            _format = str.lower(_format)
+            if str.endswith(_filename, _format):
+                match = True
+        return match
+    file_list = [os.path.join(path,x) for x in os.listdir(path) if isFormatFile(x, validFormat)]
+    return file_list
+
+def convert_gbk_code(filename,fix=""):
+    try:
+        content = open(filename, 'rb').read()
+        source_encoding = chardet.detect(content)['encoding']
+
+        if __name__ =="__main__":
+            print(source_encoding)
+        try:
+            content = content.decode("gbk", errors='ignore').encode("gbk","replace")
+        except Exception as err:
+            print(err)
+
+        open(filename+fix, 'wb').write(content)
+    except IOError as err:
+        print("I/O error:{0}".format(err))
+
+def try_parse_xml(xml_file,replace=True):
+        DOMTree = None
+        encoding_list =["utf-8","gbk","cp936",None]
+
+        for _codes in encoding_list:
+            try:
+                hfile = open(xml_file, encoding=_codes)
+                DOMTree = xml.dom.minidom.parse(hfile)
+                hfile.close()
+                break
+            except Exception as e:
+                print(e)
+
+        # mode 1:fix code with utf-8
+        if DOMTree is None:
+            if replace:
+                convert_gbk_code(xml_file)
+            else:
+                convert_gbk_code(xml_file,fix=".fix")
+                xml_file = xml_file + ".fix"
+            try:
+                hfile = open(xml_file, encoding="gbk")
+                DOMTree = xml.dom.minidom.parse(hfile)
+                hfile.close()
+            except Exception as e:
+                print(e)
+
+        # mode 2 :blocks searching where is not confidence   100%
+        if DOMTree is None:
+            pass
+        return DOMTree
+
+def parse_xml_single_rename_img_name(xml_file,img_name = ""):
+    DOMTree = try_parse_xml(xml_file)
+
+    if DOMTree is None:
+        return None
+
+    root = DOMTree.documentElement
+
+    if root.nodeName == "opencv_storage":
+        annotation = root.childNodes[1]
+    else:
+        annotation = root
+
+    folder = annotation.getElementsByTagName('filename')[0].childNodes[0]
+    old_name = folder.nodeValue
+    folder.nodeValue = img_name + os.path.splitext(old_name)[1]
+
+    with open(xml_file, 'w', encoding='utf-8') as f:
+        DOMTree.writexml(f, encoding='utf-8')
+    f.close()
+
+    return old_name
+
+def parse_rename_img_name(_args):
+    xml_dir = _args.xml_dir
+    img_dir = _args.img_dir
+
+ #   dataSet     = "20180629"
+    data_uuid   = 1
+
+    xml_format = [".xml"]
+    xml_files = getFilesList_dir(xml_dir,xml_format)
+
+    num_files = len(xml_files)
+    error_files = []
+
+    print("Total {} files of process dir ".format(num_files))
+    print("-"*50)
+
+    im_dict = []
+    for idx,f_xml in enumerate(xml_files):
+        t_list = []
+        print("prcessing {:>6}/{} \t [{}]".format(idx+1,num_files,f_xml))
+
+        new_img_name = dataSet + "_{:06d}".format(data_uuid)
+        new_xml_name = os.path.join(xml_dir,dataSet + "_{:06d}.xml".format(data_uuid))
+        old_img_name = parse_xml_single_rename_img_name(f_xml,new_img_name)
+
+        t_list= [old_img_name,new_img_name]
+
+        if old_img_name is None:
+            print("\t[ERRER]  parse xml file faild = [{}]".format(f_xml))
+            error_files.append(f_xml)
+            continue
+
+        new_img_name = new_img_name + os.path.splitext(old_img_name)[1]
+        old_img_name = os.path.join(img_dir,old_img_name)
+        new_img_name = os.path.join(img_dir,new_img_name)
+
+        if not os.path.exists(old_img_name):
+            print("\t[ERRER]  parse xml file faild = [{}]".format(f_xml))
+            error_files.append(f_xml)
+            continue
+
+        shutil.move(old_img_name,new_img_name)
+        shutil.move(f_xml,new_xml_name)
+        im_dict.append(t_list)
+        data_uuid = data_uuid + 1
+
+    def move_error_files(error_files):
+        if len(error_files) == 0:
+            return
+        error_dir = os.path.join(xml_dir,"error/")
+        if not os.path.exists(os.path.abspath(error_dir)):
+            os.mkdir(os.path.abspath(error_dir))
+
+        img_format = ['.jpg', '.jpeg', '.png', '.bmp']
+        img_files = getFilesList_dir(img_dir, img_format)
+        img_names = [os.path.basename(file) for file in img_files]
+
+        for _file in error_files:
+            _img_name = os.path.splitext(os.path.basename(_file))[0]
+            move_file = os.path.join(error_dir,os.path.basename(_file))
+            shutil.move(_file,move_file)
+
+    df = pd.DataFrame(im_dict)
+    df.to_csv(os.path.join(xml_dir,"img_name_dict.csv"))
+
+    move_error_files(error_files)
+    np.save(os.path.join(xml_dir,"error_files_list.npy"),error_files)
+
+def arg_parse():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-x', '--xml_dir', type=str, default="./", metavar='STRING',
+                        help='xml_dir(default: cur_dir)')
+    parser.add_argument('-i', '--img_dir', type=str, default="./", metavar='STRING',
+                        help='img_dir(default: cur_dir)')
+    parser.add_argument('-head', '--dataSet', type=str, default="20180711", metavar='STRING',
+                        help='dataSet')
+    parser.add_argument('-id', '--start_uuid',type=int, default=1, metavar='NUMBER',
+                        help="start_uuid")
+    args = parser.parse_args()
+    return args
+
+if __name__ == "__main__":
+    args = arg_parse()
+    args.xml_dir = r"X:\样本库备份\脱岗\20180629_脱岗\train"
+    args.img_dir = r"X:\样本库备份\脱岗\20180629_脱岗\train"
+    args.start_uuid = 1
+    args.dataSet = "20180629"
+    parse_rename_img_name(args)
