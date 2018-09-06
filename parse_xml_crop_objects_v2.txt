@@ -1,0 +1,730 @@
+import xlrd,xlsxwriter
+import pandas as pd
+import os,shutil
+import xml.dom.minidom
+import numpy as np
+import argparse
+# from tensorlayer.files import exists_or_mkdir
+import cv2
+import chardet
+from datetime import datetime,date
+class xmlparse():
+    '''
+    定义编解码，定义目标工作文件夹
+    '''
+    def __init__(self,decode,encode,workdir,withrect=True):
+        self.decode=decode
+        self.encode=encode
+        self.workdir=workdir
+        self.withrect=withrect
+    '''
+    获取工作路径下所有指定格式的文件路径
+    '''
+    def getFilesList_dir(self,validFormat):
+        def isFormatFile(filename, Formats):
+            _filename = str.lower(filename)
+            match = False
+            for _format in Formats:
+                _format = str.lower(_format)
+                if str.endswith(_filename, _format):
+                    match = True
+            return match
+        file_list = [os.path.join(self.workdir,x) for x in os.listdir(self.workdir) if isFormatFile(x, validFormat)]
+        return file_list
+    #将xml文件强行编解吗
+    def convert_code(self,filename):
+
+        try:
+
+            content = open(filename, 'rb').read()
+            try:
+                content = content.decode(self.decode, errors='ignore').encode(self.encode,"replace")
+            except Exception as err:
+                print(err)
+
+            open(filename, 'wb').write(content)
+        except IOError as err:
+            print("I/O error:{0}".format(err))
+            # source_encoding = chardet.detect(content)['encoding']
+            #
+            # if __name__ =="__main__":
+            #     print(source_encoding)
+            # try:
+            #     content = content.decode("gbk", errors='ignore').encode("gbk","replace")
+            # except Exception as err:
+            #     print(err)
+            #
+            # open(filename, 'wb').write(content)
+        except IOError as err:
+            print("I/O error:{0}".format(err))
+    #以不同编码格式解析xml文件
+    def try_parse_xml(self,xml_file):
+            DOMTree = None
+            encoding_list =["gbk","utf-8","cp936",None]
+
+            for _codes in encoding_list:
+                try:
+                    hfile = open(xml_file, encoding=_codes)
+                    DOMTree = xml.dom.minidom.parse(hfile)
+                    hfile.close()
+                    break
+                except Exception as e:
+                    print(e)
+
+            # mode 1:fix code with utf-8
+            if DOMTree is None:
+                self.convert_code(xml_file)
+            try:
+                hfile = open(xml_file, encoding=self.encode)
+                DOMTree = xml.dom.minidom.parse(hfile)
+                hfile.close()
+            except Exception as e:
+                print(e)
+
+            # mode 2 :blocks searching where is not confidence   100%
+            if DOMTree is None:
+                pass
+            return DOMTree
+    #解析xml文件内容,返回字典格式
+    def parse_xml_single_and_normal(self,xml_file):
+        def str_to_numeric(s):
+            try:
+                float(s)
+            except ValueError:
+                return False
+            else:
+                return float(s)
+        def parse_source_key(source):
+            source_dict = dict()
+            if __name__ =="__main__":
+                print('*'*20+' parse_source_key '+'*'*20)
+                print("[source]:")
+            databaseNode = source.getElementsByTagName("database")[0].childNodes[0]
+            database = databaseNode.data
+            database = str.strip(database, '""')
+
+
+            databaseNode.nodeValue =database
+
+            if __name__ == "__main__":
+                print(" "*2 + "[database]\t", database)
+            source_dict["database"] = database
+
+            annotation = source.getElementsByTagName("annotation")[0].childNodes[0].data
+            annotation = str.strip(annotation, '""')
+            if __name__ == "__main__":
+                print(" "*2 + "[annotation]\t", annotation)
+            source_dict["annotation"] = annotation
+
+            image = ""
+            if len(source.getElementsByTagName("image"))>0:
+                if len(source.getElementsByTagName("image")[0].childNodes)>0:
+                    image = source.getElementsByTagName("image")[0].childNodes[0].data
+                    image = str.strip(image, '""')
+
+            if __name__ == "__main__":
+                print(" "*2 + "[image]\t", image)
+            source_dict["image"] = image
+
+            if source.getElementsByTagName("check").length:
+                check = source.getElementsByTagName("check")[0].childNodes[0].data
+                check = bool(check)
+                if __name__ == "__main__":
+                    print(" "*2 + "[check]\t", check)
+                source_dict["check"] = check
+            else:
+                check = 0
+                if __name__ == "__main__":
+                    print(" " * 2 + "[check] modify = \t", check)
+                source_dict["check"] = check
+                checkNode = DOMTree.createElement('check')
+                checkTextValue = DOMTree.createTextNode('0')
+                checkNode.appendChild(checkTextValue)
+                source.appendChild(checkNode)
+
+            if source.getElementsByTagName("normalize").length:
+                normalize = source.getElementsByTagName("normalize")[0].childNodes[0].data
+                normalize = bool(normalize)
+                if __name__ == "__main__":
+                    print(" "*2 + "[normalize]\t", normalize)
+                source_dict["normalize"] = normalize
+            else:
+                normalize = 0
+                if __name__ == "__main__":
+                    print(" " * 2 + "[normalize] modify = \t", normalize)
+                source_dict["normalize"] = 0
+                normalizeNode = DOMTree.createElement('normalize')
+                normalizeTextValue = DOMTree.createTextNode('0')
+                normalizeNode.appendChild(normalizeTextValue)
+                source.appendChild(normalizeNode)
+
+            if source.getElementsByTagName("paramsVer").length:
+                paramsVer = source.getElementsByTagName("paramsVer")[0].childNodes[0].data
+                paramsVer = int(str_to_numeric(paramsVer))
+                if __name__ == "__main__":
+                    print(" "*2 + "[paramsVer]\t", paramsVer)
+                source_dict["paramsVer"] = paramsVer
+
+            return source_dict
+
+        def parse_objects_key(objects):
+            def parse_bndbox_key(bndbox,print_ex=""):
+                bndbox_dict = dict()
+                if __name__ == "__main__":
+                    bndbox_str = "[bndbox" + print_ex + "]:"
+                    print(" " * 4 + bndbox_str)
+                xmin = bndbox.getElementsByTagName("xmin")[0].childNodes[0].data
+                xmin = int(str_to_numeric(xmin))
+                bndbox_dict["xmin"] = xmin
+
+                ymin = bndbox.getElementsByTagName("ymin")[0].childNodes[0].data
+                ymin = int(str_to_numeric(ymin))
+                bndbox_dict["ymin"] = ymin
+
+                xmax = bndbox.getElementsByTagName("xmax")[0].childNodes[0].data
+                xmax = int(str_to_numeric(xmax))
+                bndbox_dict["xmax"] = xmax
+
+                ymax = bndbox.getElementsByTagName("ymax")[0].childNodes[0].data
+                ymax = int(str_to_numeric(ymax))
+                bndbox_dict["ymax"] = ymax
+
+                if __name__ == "__main__":
+                    print(" "*6 + "(xmin,ymin,xmax,ymax) = (%d,%d,%d,%d)"%(xmin,ymin,xmax,ymax))
+
+                return bndbox_dict
+
+            def parse_prob_key(prob):
+                prob_dict = dict()
+                if __name__ == "__main__":
+                    print(" "*4 + "[prob]:")
+                flame=0
+                try:
+                    flame = prob.getElementsByTagName("flame")[0].childNodes[0].data
+                    flame = str_to_numeric(flame)
+                    prob_dict["flame"] = flame
+                except:
+                    prob_dict["flame"] =flame
+                if __name__ == "__main__":
+                    print(" "*6 + "[flame]:%3.4f%%"%(flame*100))
+
+                smoke = prob.getElementsByTagName("smoke")[0].childNodes[0].data
+                smoke = str_to_numeric(smoke)
+                prob_dict["smoke"] = smoke
+                if __name__ == "__main__":
+                    print(" " * 6 + "[smoke]:%3.4f%%" % (smoke * 100))
+
+                people = prob.getElementsByTagName("people")[0].childNodes[0].data
+                people = str_to_numeric(people)
+                prob_dict["people"] = people
+                if __name__ == "__main__":
+                    print(" " * 6 + "[people]:%3.4f%%" % (people * 100))
+
+                car = prob.getElementsByTagName("car")[0].childNodes[0].data
+                car = str_to_numeric(car)
+                prob_dict["car"] = car
+                if __name__ == "__main__":
+                    print(" " * 6 + "[car]:%3.4f%%" % (car * 100))
+
+                unknwon = prob.getElementsByTagName("unknwon")[0].childNodes[0].data
+                unknwon = str_to_numeric(unknwon)
+                prob_dict["unknwon"] = unknwon
+                if __name__ == "__main__":
+                    print(" " * 6 + "[unknwon]:%3.4f%%" % (unknwon * 100))
+                return prob_dict
+
+            objects_list = []
+            if __name__ == "__main__":
+                print('*' * 20 + ' parse_objects_key ' + '*' * 20)
+                print("[objects]:")
+            for idx,object in enumerate(objects):
+                if __name__ == "__main__":
+                    print(" "*2 + "[object_%02d]:"%(idx+1))
+                object_dict = dict()
+
+                bndbox = object.getElementsByTagName("bndbox")[0]
+                _bndbox = parse_bndbox_key(bndbox)
+
+                # check bndbox validity
+                if _bndbox["xmax"] > _bndbox["xmin"] and _bndbox["ymax"] > _bndbox["ymin"]:
+                    object_dict["bndbox"] =_bndbox
+                else:
+                    continue
+
+                if object.getElementsByTagName("name")[0].childNodes.length == 0:
+                    continue
+                name = object.getElementsByTagName("name")[0].childNodes[0].data
+                name = str.strip(name, '""')
+                if __name__ == "__main__":
+                    print(" "*4 + "[name]\t\t",name)
+                object_dict["name"] = name
+
+                pose =""
+                if object.getElementsByTagName("pose").length:
+                    if len(object.getElementsByTagName("pose")[0].childNodes)>0:
+                        pose = object.getElementsByTagName("pose")[0].childNodes[0].data
+                        pose = str.strip(pose, '""')
+                    if __name__ == "__main__":
+                        print(" "*4 + "[pose]\t\t",pose)
+                    object_dict["pose"] = pose
+
+                if object.getElementsByTagName("key").length:
+                    if object.getElementsByTagName("key")[0].childNodes.length:
+                        key = object.getElementsByTagName("key")[0].childNodes[0].data
+                        key = str.strip(key, '""')
+                        if key=="chair" or key=="chaircloth":
+                            key="chaircloth"
+                        if __name__ == "__main__":
+                            print(" " * 4 + "[key]\t\t", key)
+                        object_dict["key"] = key
+
+                if object.getElementsByTagName("truncated").length:
+                    truncated = object.getElementsByTagName("truncated")[0].childNodes[0].data
+                    truncated = int(str_to_numeric(truncated))
+                    if __name__ == "__main__":
+                        print(" "*4 + "[truncated]\t\t",truncated)
+                    object_dict["truncated"] = truncated
+                else:
+                    truncatedNode = DOMTree.createElement('truncated')
+                    truncated = "0"
+                    truncatedTestValue = DOMTree.createTextNode(truncated)
+                    if __name__ == "__main__":
+                        print("[truncated]\t modify = ", truncated)
+                    xml_dict["truncated"] = truncated
+                    truncatedNode.appendChild(truncatedTestValue)
+                    object.appendChild(truncatedNode)
+
+                if object.getElementsByTagName("difficult").length:
+                    difficult = object.getElementsByTagName("difficult")[0].childNodes[0].data
+                    difficult = int(str_to_numeric(difficult))
+                    if __name__ == "__main__":
+                        print(" "*4 + "[difficult]\t\t",difficult)
+                    object_dict["difficult"] = difficult
+                else:
+                    difficultNode = DOMTree.createElement('difficult')
+                    difficult = "0"
+                    difficultTestValue = DOMTree.createTextNode(difficult)
+                    if __name__ == "__main__":
+                        print("[difficult]\t modify = ", difficult)
+                    xml_dict["difficult"] = difficult
+                    difficultNode.appendChild(difficultTestValue)
+                    object.appendChild(difficultNode)
+
+
+                if object.getElementsByTagName("alarm").length:
+                    alarm = object.getElementsByTagName("alarm")[0].childNodes[0].data
+                    alarm = bool(alarm)
+                    if __name__ == "__main__":
+                        print(" " * 4 + "[alarm]\t\t", alarm)
+                    object_dict["alarm"] = alarm
+
+                if object.getElementsByTagName("bndbox_dnn").length:
+                    bndbox_dnn = object.getElementsByTagName("bndbox_dnn")[0]
+                    object_dict["bndbox_dnn"] = parse_bndbox_key(bndbox_dnn,print_ex="_dnn")
+
+                if object.getElementsByTagName("prob").length:
+                    print(object.getElementsByTagName("prob").length)
+                    prob = object.getElementsByTagName("prob")[0]
+                    #object_dict["prob"] = parse_prob_key(prob)
+
+                objects_list.append(object_dict)
+
+
+            return objects_list
+
+        def parse_size_key(size):
+            size_dict = dict()
+            if __name__ == "__main__":
+                print('*' * 20 + ' parse_size_key ' + '*' * 20)
+                print("[size]:")
+            width = size.getElementsByTagName("width")[0].childNodes[0].data
+            width = int(width)
+            if __name__ == "__main__":
+                print(" "*2 + "[width]\t", width)
+            size_dict["width"] = width
+
+            height = size.getElementsByTagName("height")[0].childNodes[0].data
+            height = int(height)
+            if __name__ == "__main__":
+                print(" "*2 + "[height]\t", height)
+            size_dict["height"] = height
+
+            depth = size.getElementsByTagName("depth")[0].childNodes[0].data
+            depth = int(depth)
+            if __name__ == "__main__":
+                print(" "*2 + "[depth]\t", depth)
+            size_dict["depth"] = depth
+
+            return size_dict
+
+        xml_dict = dict()
+        DOMTree = self.try_parse_xml(xml_file)
+
+        if DOMTree is None:
+            print("没有东西")
+            return None
+
+        if __name__ == "__main__":
+            print("==" * 10 + " parse xml root " + "==" * 10)
+
+        root = DOMTree.documentElement
+        if __name__ == "__main__":
+            print("rootName:", root.nodeName)
+
+        if root.nodeName == "opencv_storage":
+            if __name__ == "__main__":
+                print("==" * 10 + " this is opencv_format from Local_Files_Label " + "==" * 10)
+            xml_dict["format"] = "Local_Files_Label"
+            annotation = root.childNodes[1]
+        else:
+            annotation = root
+            if annotation.getElementsByTagName("prob").length == 0:
+                if __name__ == "__main__":
+                    print("==" * 10 + " this is voc_format from VOC_2012 " + "==" * 10)
+                xml_dict["format"] = "VOC_2012"
+            else:
+                if __name__ == "__main__":
+                    print("==" * 10 + " this is opencv_format from onLine_Label " + "==" * 10)
+                xml_dict["format"] = "onLine_Label"
+
+        if __name__ == "__main__":
+            print("==" * 10 + " find annotation root " + "==" * 10)
+        folder = annotation.getElementsByTagName('folder')[0].childNodes[0]
+        _data = folder.data
+        _data = str.strip(_data, '""')
+        folder.nodeValue = _data
+        if __name__ == "__main__":
+            print("[folder]\t", _data)
+        xml_dict["folder"] = _data
+
+        filename = annotation.getElementsByTagName('filename')[0].childNodes[0]
+        _data = filename.data
+        _data = str.strip(_data, '""')
+        filename.nodeValue = _data
+        #filename.nodeValue = file
+        if __name__ == "__main__":
+            print("[filename]\t", _data)
+        xml_dict["filename"] = _data
+
+        segmented = annotation.getElementsByTagName('segmented')[0].childNodes[0].data
+        segmented = bool(segmented)
+        if __name__ == "__main__":
+            print("[segmented]\t", segmented)
+        xml_dict["segmented"] = segmented
+
+        if annotation.getElementsByTagName('author').length:
+            author = annotation.getElementsByTagName('author')[0].childNodes[0].data
+            author = str.strip(author, '""')
+            if __name__ == "__main__":
+                print("[author]\t", author)
+            xml_dict["author"] = author
+        else:
+            authorNode = DOMTree.createElement('author')
+            author = "UnName"
+            authorTestValue = DOMTree.createTextNode(author)
+            if __name__ == "__main__":
+                print("[author]\t modify = ", author)
+            xml_dict["author"] = author
+            authorNode.appendChild(authorTestValue)
+            annotation.appendChild(authorNode)
+
+        if annotation.getElementsByTagName('date').length:
+            dataNode = annotation.getElementsByTagName('date')[0].childNodes[0]
+            date = dataNode.data
+            date = str.strip(date, '""')
+            dataNode.nodeValue =date
+            if __name__ == "__main__":
+                print("[date]\t", date)
+            xml_dict["date"] = date
+        else:
+            import time
+            _time = time.localtime()
+            date = "%d%02d%02d" % (tuple(_time[:3]))
+            dateNode = DOMTree.createElement('date')
+            dateTestValue = DOMTree.createTextNode(date)
+            if __name__ == "__main__":
+                print("[date]\t modify = ", date)
+            xml_dict["date"] = date
+            dateNode.appendChild(dateTestValue)
+            annotation.appendChild(dateNode)
+
+        source = annotation.getElementsByTagName('source')[0]
+        xml_dict['source'] = parse_source_key(source)
+
+        size = annotation.getElementsByTagName('size')[0]
+        xml_dict['size'] = parse_size_key(size)
+
+        if annotation.getElementsByTagName('objects').length:
+            objects = annotation.getElementsByTagName('objects')[0]
+            objects = objects.getElementsByTagName('object')
+        else:
+            objects = annotation.getElementsByTagName('object')
+
+        xml_dict["objects"] = parse_objects_key(objects)
+
+        if annotation.getElementsByTagName('objects').length == 0:
+            objects = annotation.getElementsByTagName('object')
+            objectsNode = DOMTree.createElement('objects')
+            for obj in objects:
+                obj_node = obj.cloneNode(True)
+                objectsNode.appendChild(obj_node)
+                obj.parentNode.removeChild(obj)
+            annotation.appendChild(objectsNode)
+
+        try:
+            with open(xml_file, 'w', encoding=self.encode) as f:
+                DOMTree.writexml(f, encoding=self.encode)
+        except Exception as e:
+            print(e)
+
+        return xml_dict
+    #读取路径下的图片
+    def cv_imread(self,file_path):
+        cv_img = None
+        try:
+            cv_img = cv2.imdecode(np.fromfile(file_path,dtype=np.uint8),-1)
+        except Exception as e:
+            print(e)
+        return cv_img
+    #解析关键词
+    def key_parse(self,key_str):
+        key_str_list=list(key_str)
+        not_chinese_index=[]
+        for i in range(len(key_str_list)):
+            if not self.is_chinese(key_str_list[i]):
+                not_chinese_index.append(i)
+        if len(not_chinese_index)!=0:
+            for i in not_chinese_index:
+                key_str_list[i]="."
+            key_list="".join(key_str_list).split(".")
+        else:
+            key_list=[key_str]
+        return  key_list
+    #判断单个字符串是否为中文字符
+    def is_chinese(self,single_str):
+        X,Y=['\u4e00','\u9fa5']
+        if X<=single_str<=Y:
+            return  True
+        else:
+            return False
+    #解析单个xml文件并将信息保存
+    def parse_xml_crop_roi(self):
+        xml_dir = self.workdir
+        img_dir = self.workdir
+        roi_dir = self.workdir+"\\crop"
+
+
+        #exists_or_mkdir(roi_dir)
+
+        if not os.path.exists(os.path.abspath(roi_dir)):
+            os.mkdir(os.path.abspath(roi_dir))
+
+        xml_format = [".xml"]
+        xml_files = self.getFilesList_dir(xml_format)
+
+        num_files = len(xml_files)
+        error_files = []
+        #定义个字典保存错误文件的错误信息,无错误信息文件为空字符串
+        info_static_data=[]
+        error_files_dict={}
+        print("Total {} files of process dir ".format(num_files))
+        print("-"*50)
+        #file_dict={}
+        #id_ogr=100000
+        for idx,f_xml in enumerate(xml_files):
+            #id_ogr+=1
+            #datenow=datetime.now().strftime('%Y%m%d_%H%M%S')
+            #xml_name=os.path.basename(f_xml)
+            #if xml_name not in file_dict.keys():
+               # file_dict[xml_name]=datenow+"_"+str(id_ogr)
+            error_files_dict[f_xml]=""
+            print("prcessing {:>6}/{} \t [{}]".format(idx+1,num_files,f_xml))
+            xml_dict = self.parse_xml_single_and_normal(f_xml)
+            #os.rename(f_xml, os.path.join(os.path.dirname(f_xml), file_dict[xml_name]+".xml"))
+            #img_formats = ['.jpg', '.jpeg', '.png', '.bmp']
+            #for i in img_formats:
+                #if os.path.exists(f_xml.replace(".xml",i)):
+                 #   os.rename(f_xml.replace(".xml",i),os.path.join(os.path.dirname(f_xml), file_dict[xml_name]+i))
+            if xml_dict is None:
+                print("\t[ERRER]  parse xml file faild = [{}]".format(f_xml))
+                error_files.append(f_xml)
+                error_files_dict[f_xml]+="parse xml file faild"
+                continue
+            picture_type=xml_dict["filename"]
+            filename=os.path.splitext(xml_dict["filename"])[0]+".xml"
+            picture_size=xml_dict['size']
+            picture_size_width=picture_size['width']
+            picture_size_height = picture_size['height']
+            picture_size_depth = picture_size['depth']
+            img_name_valid = os.path.splitext(os.path.basename(f_xml))[0]
+
+            if not os.path.splitext(xml_dict["filename"])[0] == img_name_valid:
+                print("\t[ERRER]   xml file name "
+                      "[{}] is not equal img name [{}]"
+                      .format(xml_dict["filename"],f_xml,img_name_valid))
+                error_files.append(f_xml)
+                error_files_dict[f_xml]+="\t [{}] its file name is not equal img name".format(f_xml)
+                continue
+
+
+
+            img_file = os.path.join(img_dir,xml_dict["filename"])
+
+
+            img = cv2.imread(img_file)
+            if img is None:
+                img = self.cv_imread(img_file)
+            rect_img=cv2.imread(img_file)
+            if img is None:
+                print("\t[ERRER] read img file faild :[{}]".format(f_xml))
+                error_files.append(f_xml)
+                error_files_dict[f_xml]+="\t read [{}] img file faild ".format(f_xml)
+                continue
+
+            objects = xml_dict["objects"]
+
+            if len(objects) == 0:
+                print("\t[ERRER]  objects is empty with [{}]".format(f_xml))
+                error_files.append(f_xml)
+                error_files_dict[f_xml]+="\t objects is empty in file [{}]".format(f_xml)
+                continue
+
+            valid = True
+            for idx,ob in enumerate(objects):
+                label=ob['name']
+                bndbox = ob["bndbox"]
+                bndbox = [x for _,x in bndbox.items()]
+                #解析key关键词
+                key_str=""
+                if "key" in ob:
+                    if ob["key"]=="chair" or ob["key"]=="chaircloth":
+                        key_str="chaircloth"
+                    else:
+                        key_list=self.key_parse(ob["key"])
+                        key_str=""
+                        for key in key_list:
+                            key_str+="_"+key
+                y_min=bndbox[1]
+                y_max=bndbox[3]
+                x_min=bndbox[0]
+                x_max=bndbox[2]
+
+
+
+                roi_img_name = os.path.splitext(xml_dict["filename"])[0] + "_{:>2}_{}{}.jpg".format(idx, ob["name"],key_str)
+                rect_name=filename.replace(".xml",".jpg")
+                key_str=key_str.split("_")[1:]
+                if len("".join(key_str))==0:
+                    key_str=""
+                else:
+                    key_str="、".join(key_str)
+                if not(y_min>y_max or x_min>x_max):
+                    info_static_data.append(
+                    [filename, label, picture_type, picture_size_width, picture_size_height, picture_size_depth, key_str,
+                     y_min, y_max, x_min, x_max,x_max-x_min,y_max-y_min,(x_max-x_min)*(y_max-y_min)])
+                if not os.path.exists(os.path.join(roi_dir,roi_img_name)) and not self.withrect:
+                    roi_img = img[bndbox[1]:bndbox[3],bndbox[0]:bndbox[2]]
+
+                    roi_img_name = os.path.join(roi_dir,roi_img_name)
+                    try:
+                        cv2.imencode('.jpg',roi_img)[1].tofile(roi_img_name)
+                    except Exception as e:
+                        print(e)
+                        print("\t[ERRER] save roi img with name [{}] file faild :[{}]".format(roi_img_name,f_xml))
+                        valid = False
+                        continue
+                if self.withrect:
+                    cv2.rectangle(img, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+                    cv2.putText(img,str(idx+1)+"_"+label,(x_min,y_min),cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
+                    if not os.path.exists(roi_dir+"/rect"):
+                        os.mkdir(roi_dir+"/rect")
+                    cv2.imencode(".jpg",img)[1].tofile(roi_dir+"/rect"+"/"+rect_name)
+            if not valid:
+                error_files.append(f_xml)
+                error_files_dict[f_xml]+="\t[ERRER] save roi img with name [{}] file faild :[{}]".format(roi_img_name,f_xml)
+        def dict_to_excel(error_dict):
+            workbook=xlsxwriter.Workbook(self.workdir+"//error_file_info.xlsx")
+            worksheet=workbook.add_worksheet("Sheet1")
+            bold=workbook.add_format({"bold":1})
+            heading=["error file","error info"]
+            error_filename=list(error_dict.keys())
+            error_info=list(error_dict.values())
+            worksheet.write_row("A1",heading,bold)
+            worksheet.write_column("A2",error_filename)
+            worksheet.write_column("B2",error_info)
+            workbook.close()
+        def move_error_files(error_files_dict):
+            if len(error_files) == 0:
+                return
+            error_dir = os.path.join(xml_dir,"error/")
+            if not os.path.exists(os.path.abspath(error_dir)):
+                os.mkdir(os.path.abspath(error_dir))
+            img_format = ['.jpg', '.jpeg', '.png', '.bmp']
+            img_files = self.getFilesList_dir(img_format)
+            img_names = [os.path.basename(file) for file in img_files]
+            for _file in error_files_dict.keys():
+                if len(error_files_dict[_file])!=0:
+                    move_file = os.path.join(error_dir,os.path.basename(_file))
+                    if os.path.exists(_file):
+                        shutil.move(_file,error_dir)
+                    for img_format_ in img_format:
+                        if os.path.exists(_file.replace(".xml",img_format_)):
+                            shutil.move(_file.replace(".xml",img_format_),error_dir)
+        move_error_files(error_files_dict)
+        #np.save("error_files_list.npy",error_files)
+        for i in list(error_files_dict.keys()):
+            if len(error_files_dict[i]) == 0:
+                del error_files_dict[i]
+        dict_to_excel(error_files_dict)
+        info_static_data=pd.DataFrame(info_static_data)
+        try:
+            info_static_data.to_excel(self.workdir+"\\info_static.xls",sheet_name="info_static",header=['xml_filename','label',"picture_filename",'picture_size_width','picture_size_height','picture_size_depth','key_str','y_min','y_max','x_min','x_max','bndbox_width','bndbox_height','bndbox_area'])
+        except:
+            print("no info static")
+        label_info_static=pd.DataFrame(info_static_data[1].value_counts())
+        label_info_static.to_excel(self.workdir+"\\label_static.xls",header=["num"],index_label="label")
+        #label_info_static.to_excel(self.workdir+"\\label_static.xls",header=["num"],index_label="label")
+        #response=input("是否需要将文件分类到各文件夹？y/n")
+        response='n'
+        project_dir=xml_dir
+        if response=="y":
+            info_static_data=np.array(info_static_data)
+            for datarow in info_static_data:
+                label=datarow[1]
+                if os.path.exists(os.path.join(project_dir,label)):
+                    shutil.copy(os.path.join(project_dir,datarow[0]),os.path.join(project_dir,label))
+                    shutil.copy(os.path.join(project_dir, datarow[2]), os.path.join(project_dir, label))
+                else:
+                    os.mkdir(os.path.join(project_dir,label))
+                    shutil.copy(os.path.join(project_dir, datarow[0]), os.path.join(project_dir, label))
+                    shutil.copy(os.path.join(project_dir, datarow[2]), os.path.join(project_dir, label))
+    # def arg_parse(self):
+    #     parser = argparse.ArgumentParser()
+    #     parser.add_argument('-x', '--xml_dir', type=str, default="./", metavar='STRING',
+    #                         help='xml_dir(default: cur_dir)')
+    #     parser.add_argument('-i', '--img_dir', type=str, default="./", metavar='STRING',
+    #                         help='img_dir(default: cur_dir)')
+    #     parser.add_argument('-o', '--out_dir',type=str, default="./crop/", metavar='STRING',
+    #                         help='img_dir(default: cur_dir/crop)')
+    #     args = parser.parse_args()
+    #
+    #     return args
+def move(dir1,dir2):
+    fileList = os.listdir(dir1)
+    for file in fileList:
+        filename1 = os.path.join(dir1, file)
+        shutil.copy(filename1, dir2)
+    shutil.rmtree(dir1)
+
+if __name__ == "__main__":
+    # args = arg_parse()
+    # args.xml_dir = "./"
+    # args.img_dir = "./"
+    # args.out_dir = "./crop"
+    # parse_xml_crop_roi(args)
+    dir=r"F:\误报筛选\3"
+    dir1=dir+"/crop/rect"
+    dir2=dir+"/crop"
+    xml_parse=xmlparse("utf-8","utf-8",dir)
+    xml_parse.parse_xml_crop_roi()
+    move(dir1,dir2)
